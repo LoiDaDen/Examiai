@@ -3,7 +3,7 @@ name: Examinai Staging CI/CD
 on:
   push:
     branches:
-      - cicd-staging
+      - main
   workflow_dispatch:
 
 permissions:
