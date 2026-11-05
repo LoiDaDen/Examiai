@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+.next
+out
+build
+coverage
+.env*
+*.pem
+*.key
+*.log
+*.tsbuildinfo
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+nginx/
+README-deploy-staging.md
