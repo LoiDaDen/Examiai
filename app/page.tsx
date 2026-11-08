@@ -14,7 +14,7 @@ const TRANSLATIONS = {
   EN: {
     heroTitle: (
       <>
-        <span className="word-gradient">Supercharge</span> your IELTS journey
+        <span className="word-gradient"></span> your IELTS journey
         with <span className="ai-underline">AI</span>
       </>
     ),
