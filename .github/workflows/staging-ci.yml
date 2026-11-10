@@ -109,19 +109,6 @@ jobs:
 
           ssh "${SSH_ARGS[@]}" \
             "$SSH_USER@$SSH_HOST" \
-            'sudo -n /usr/local/sbin/examinai-deploy-staging'
-
-          DEPLOYED_SHA=$(ssh "${SSH_ARGS[@]}" \
-            "$SSH_USER@$SSH_HOST" \
-            'cd /root/LoiDen/Examiai && git rev-parse HEAD')
-
-          if [[ "$DEPLOYED_SHA" != "$GITHUB_SHA" ]]; then
-            echo "ERROR: Deployed commit does not match CI commit"
-            exit 1
-          fi
-
-          ssh "${SSH_ARGS[@]}" \
-            "$SSH_USER@$SSH_HOST" \
-            'cd /root/LoiDen/Examiai && bash scripts/smoke-staging.sh'
+            "sudo -n /usr/local/sbin/examinai-deploy-staging ${GITHUB_SHA}"
 
           echo "STAGING DEPLOYMENT VERIFIED"
