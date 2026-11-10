@@ -26,6 +26,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { UserProfileMenu } from "@/components/user-profile-menu";
 import { useI18n } from "@/lib/i18n/provider";
 import { supabase } from "@/lib/supabase/client";
+import { authFetch } from "@/lib/auth/client-request";
 import type { ListeningQuestionType, ReadingQuestionType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
@@ -163,7 +164,7 @@ export function ExamAdminForm() {
         return;
       }
 
-      const res = await fetch(`/api/profile?userId=${data.user.id}`);
+      const res = await authFetch("/api/profile");
       const profile = res.ok ? await res.json() : null;
 
       if (profile?.role !== "admin") {

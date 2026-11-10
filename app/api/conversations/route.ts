@@ -1,42 +1,169 @@
+import { z } from "zod";
+
 import {
   createConversation,
+  getConversation,
   getUserConversations,
   deleteConversation,
   updateConversationTitle,
   upsertProfile,
 } from "@/lib/db/queries";
 
-export async function POST(req: Request) {
-  const { userId, type, title } = await req.json();
+import { requireUser } from "@/lib/auth/require-user";
 
-  // Ensure the user's profile exists before creating a conversation
-  if (userId) {
-    await upsertProfile({ id: userId });
+const createSchema = z.object({
+  userId: z.string().uuid().optional(),
+  type: z.enum([
+    "general",
+    "writing",
+    "speaking",
+    "reading",
+    "listening",
+  ]).default("general"),
+  title: z.string().trim().max(255).optional(),
+});
+
+const renameSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().trim().min(1).max(255),
+});
+
+const deleteSchema = z.object({
+  id: z.string().uuid(),
+});
+
+async function parseBody(req: Request) {
+  try {
+    return await req.json();
+  } catch {
+    return null;
   }
+}
 
-  const conversation = await createConversation({ userId, type, title });
-  return Response.json(conversation);
+function forbidden() {
+  return Response.json(
+    { error: "Forbidden" },
+    { status: 403 }
+  );
+}
+
+function notFound() {
+  return Response.json(
+    { error: "Conversation not found" },
+    { status: 404 }
+  );
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-  if (!userId) return Response.json({ conversations: [] });
-  const conversations = await getUserConversations(userId);
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
+  const userId = new URL(req.url)
+    .searchParams.get("userId");
+
+  if (userId && userId !== auth.user.id) {
+    return forbidden();
+  }
+
+  const conversations =
+    await getUserConversations(auth.user.id);
+
   return Response.json({ conversations });
 }
 
-export async function PATCH(req: Request) {
-  const { id, title } = await req.json();
-  if (!id || typeof title !== "string") {
-    return Response.json({ error: "Missing id or title" }, { status: 400 });
+export async function POST(req: Request) {
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
+  const parsed = createSchema.safeParse(
+    await parseBody(req)
+  );
+
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid request" },
+      { status: 400 }
+    );
   }
-  await updateConversationTitle(id, title.trim());
+
+  const data = parsed.data;
+
+  if (
+    data.userId &&
+    data.userId !== auth.user.id
+  ) {
+    return forbidden();
+  }
+
+  await upsertProfile({ id: auth.user.id });
+
+  const conversation = await createConversation({
+    userId: auth.user.id,
+    type: data.type,
+    title: data.title,
+  });
+
+  return Response.json(conversation, {
+    status: 201,
+  });
+}
+
+export async function PATCH(req: Request) {
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
+  const parsed = renameSchema.safeParse(
+    await parseBody(req)
+  );
+
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid request" },
+      { status: 400 }
+    );
+  }
+
+  const { id, title } = parsed.data;
+  const conversation = await getConversation(id);
+
+  if (
+    !conversation ||
+    conversation.userId !== auth.user.id
+  ) {
+    return notFound();
+  }
+
+  await updateConversationTitle(id, title);
+
   return Response.json({ success: true });
 }
 
 export async function DELETE(req: Request) {
-  const { id } = await req.json();
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
+  const parsed = deleteSchema.safeParse(
+    await parseBody(req)
+  );
+
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid request" },
+      { status: 400 }
+    );
+  }
+
+  const { id } = parsed.data;
+  const conversation = await getConversation(id);
+
+  if (
+    !conversation ||
+    conversation.userId !== auth.user.id
+  ) {
+    return notFound();
+  }
+
   await deleteConversation(id);
+
   return Response.json({ success: true });
 }
