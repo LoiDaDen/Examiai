@@ -294,7 +294,6 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
  * Stream an expert's structured output, sending throttled partial updates via SSE.
  * Returns the final normalized result.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function streamExpert<S extends z.ZodType>(config: {
   model: Parameters<typeof streamText>[0]["model"];
   system: string;
@@ -542,7 +541,7 @@ export async function POST(req: Request) {
                       output: Output.object({ schema: languageFeedbackSchema }),
             });
 
-            let latestFeedback: any = null;
+            let latestFeedback: Record<string, unknown> = {};
             let lastSentTime = 0;
             for await (const partial of partialOutputStream) {
               latestFeedback = partial;

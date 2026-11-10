@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -150,6 +150,10 @@ export function ReadingPractice() {
   const [timeLeft, setTimeLeft] = useState(20 * 60);
   const assessmentLanguageRef = useRef<string | null>(null);
 
+  const reportReadingError = useEffectEvent(() => {
+    setLoadError(t.practice.readingDataMissing);
+  });
+
   useEffect(() => {
     let cancelled = false;
 
@@ -169,7 +173,7 @@ export function ReadingPractice() {
         setTimeLeft(20 * 60);
       } catch {
         if (!cancelled) {
-          setLoadError(t.practice.readingDataMissing);
+          reportReadingError();
         }
       } finally {
         if (!cancelled) setIsLoading(false);

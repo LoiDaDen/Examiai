@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   Activity,
   CheckCircle2,
   ChevronLeft,
   Clock,
   FileQuestion,
-  Headphones,
   Home,
   ListChecks,
   Loader2,
@@ -212,6 +211,10 @@ export function ListeningPractice() {
   const [timeLeft, setTimeLeft] = useState(10 * 60);
   const assessmentLanguageRef = useRef<string | null>(null);
 
+  const reportListeningError = useEffectEvent(() => {
+    setLoadError(t.practice.listeningDataMissing);
+  });
+
   useEffect(() => {
     let cancelled = false;
 
@@ -231,9 +234,7 @@ export function ListeningPractice() {
         setTimeLeft(10 * 60);
       } catch {
         if (!cancelled) {
-          setLoadError(
-            t.practice.listeningDataMissing
-          );
+          reportListeningError();
         }
       } finally {
         if (!cancelled) setIsLoading(false);

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { Home, HelpCircle, FileText, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -66,9 +68,12 @@ export function WritingSubmissionView({
                 {submission.question}
               </p>
               {submission.imageUrl && (
-                <img
+                <Image
                   src={submission.imageUrl}
                   alt="Task chart"
+                  width={1200}
+                  height={800}
+                  unoptimized
                   className="w-full h-auto object-contain mt-4 rounded-xl"
                 />
               )}

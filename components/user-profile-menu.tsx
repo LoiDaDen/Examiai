@@ -12,6 +12,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import { useI18n } from "@/lib/i18n/provider";
 import { supabase } from "@/lib/supabase/client";
 import { authFetch } from "@/lib/auth/client-request";
@@ -33,9 +34,8 @@ import {
 export function UserProfileMenu() {
   const router = useRouter();
   const { t, language, setLanguage } = useI18n();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -74,12 +74,10 @@ export function UserProfileMenu() {
 
   useEffect(() => {
     const saved = localStorage.getItem("examinai-theme") || "light";
-    setTheme(saved as "light" | "dark");
     document.documentElement.classList.toggle("dark", saved === "dark");
   }, []);
 
   function toggleTheme(newTheme: "light" | "dark") {
-    setTheme(newTheme);
     localStorage.setItem("examinai-theme", newTheme);
     document.documentElement.classList.toggle("dark", newTheme === "dark");
   }
