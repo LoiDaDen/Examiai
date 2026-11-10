@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
+import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import {
   Menu,
@@ -88,7 +89,7 @@ function ChatPageInner() {
   const [speakingModalOpen, setSpeakingModalOpen] = useState(false);
 
   // Auth state
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Conversation state
@@ -195,7 +196,7 @@ function ChatPageInner() {
           hasToolCall = true;
           hasTextAfterTool = false;
         }
-        if (hasToolCall && part.type === "text" && (part as any).text?.trim()) {
+        if (hasToolCall && part.type === "text" && part.text.trim()) {
           hasTextAfterTool = true;
         }
       }
@@ -232,6 +233,22 @@ function ChatPageInner() {
     return merged;
   }, [messages]);
 
+  // Conversation management
+  const loadConversations = useCallback(async (userId: string) => {
+    setConversationsLoading(true);
+    try {
+      const res = await authFetch(`/api/conversations?userId=${userId}`);
+      if (res.ok) {
+        const { conversations: convs } = await res.json();
+        setConversations(convs ?? []);
+      }
+    } catch {
+      // Silent failure for conversation loading
+    } finally {
+      setConversationsLoading(false);
+    }
+  }, []);
+
   // Auth handling
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -261,7 +278,7 @@ function ChatPageInner() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [loadConversations, setMessages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,22 +309,6 @@ function ChatPageInner() {
     }
   }, []);
 
-  // Conversation management
-  const loadConversations = useCallback(async (userId: string) => {
-    setConversationsLoading(true);
-    try {
-      const res = await authFetch(`/api/conversations?userId=${userId}`);
-      if (res.ok) {
-        const { conversations: convs } = await res.json();
-        setConversations(convs ?? []);
-      }
-    } catch {
-      // Silent failure for conversation loading
-    } finally {
-      setConversationsLoading(false);
-    }
-  }, []);
-
   async function selectConversation(id: string) {
     // Check if this is a writing/speaking conversation — open in dedicated interface
     const conv = conversations.find((c) => c.id === id);
@@ -329,7 +330,7 @@ function ChatPageInner() {
       if (!res.ok) throw new Error();
       const { messages: msgs } = await res.json();
       setMessages(
-        (msgs ?? []).map((m: any) => ({
+        (msgs ?? []).map((m: { id: string; role: UIMessage["role"]; content: string }) => ({
           id: m.id,
           role: m.role,
           parts: [{ type: "text" as const, text: m.content }],

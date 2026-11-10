@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useState, useRef, useCallback } from "react";
 import { Upload, X, ImageIcon, HelpCircle, FileText, Send } from "lucide-react";
 import { useI18n } from "@/lib/i18n/provider";
@@ -144,9 +146,12 @@ export function SubmitEssayModal({
             </label>
             {imagePreview ? (
               <div className="relative overflow-hidden rounded-xl border border-border">
-                <img
+                <Image
                   src={imagePreview}
                   alt={t.writing.uploadedChart}
+                  width={800}
+                  height={400}
+                  unoptimized
                   className="max-h-48 w-full object-contain bg-muted/30"
                 />
                 <button
