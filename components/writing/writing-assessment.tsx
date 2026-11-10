@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import { supabase } from "@/lib/supabase/client";
+import { authFetch } from "@/lib/auth/client-request";
 import type { UIMessage } from "ai";
 import { useI18n } from "@/lib/i18n/provider";
 import { Button } from "@/components/ui/button";
@@ -404,6 +406,21 @@ export function WritingAssessment({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        fetch: async (input, init) => {
+          const { data } = await supabase.auth.getSession();
+          const token = data.session?.access_token;
+
+          const headers = new Headers(init?.headers);
+
+          if (token) {
+            headers.set("Authorization", `Bearer ${token}`);
+          }
+
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
         body: () => ({ conversationId: conversationIdRef.current }),
       }),
     [],
@@ -490,7 +507,7 @@ export function WritingAssessment({
 
     // Save user message to DB
     try {
-      await fetch(`/api/conversations/${conversationIdRef.current}/messages`, {
+      await authFetch(`/api/conversations/${conversationIdRef.current}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: "user", content: text }),

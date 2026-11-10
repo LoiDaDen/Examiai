@@ -1,0 +1,129 @@
+name: Examinai Staging CI/CD
+
+on:
+  push:
+    branches:
+      - cicd-staging
+  pull_request:
+    branches:
+      - cicd-staging
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: examinai-staging-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: CI - Validate Source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.3
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript validation
+        run: pnpm exec tsc --noEmit
+
+      # Existing lint issues are advisory for Staging.
+      - name: ESLint
+        continue-on-error: true
+        run: pnpm run lint
+
+      - name: Validate Smoke Test syntax
+        run: bash -n scripts/smoke-staging.sh
+
+  deploy:
+    name: CD - Deploy Staging
+    needs: validate
+
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/cicd-staging' &&
+      vars.ENABLE_STAGING_DEPLOY == 'true'
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    environment: staging
+
+    steps:
+      - name: Deploy and verify Staging
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          SSH_PORT: ${{ secrets.STAGING_SSH_PORT || '22' }}
+          SSH_KEY_B64: ${{ secrets.STAGING_SSH_PRIVATE_KEY_B64 }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+
+        run: |
+          set -Eeuo pipefail
+
+          : "${SSH_HOST:?Missing SSH host}"
+          : "${SSH_USER:?Missing SSH user}"
+          : "${SSH_KEY_B64:?Missing SSH key}"
+          : "${SSH_KNOWN_HOSTS:?Missing known_hosts}"
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+
+          printf '%s' "$SSH_KEY_B64" |
+            base64 --decode > "$HOME/.ssh/id_ed25519"
+
+          chmod 600 "$HOME/.ssh/id_ed25519"
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" |
+            tr -d '\r' > "$HOME/.ssh/known_hosts"
+
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          ssh-keygen -y -P "" \
+            -f "$HOME/.ssh/id_ed25519" > /dev/null
+
+          SSH_ARGS=(
+            -i "$HOME/.ssh/id_ed25519"
+            -p "$SSH_PORT"
+            -o IdentitiesOnly=yes
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20
+          )
+
+          ssh "${SSH_ARGS[@]}" \
+            "$SSH_USER@$SSH_HOST" \
+            'sudo -n /usr/local/sbin/examinai-deploy-staging'
+
+          DEPLOYED_SHA=$(ssh "${SSH_ARGS[@]}" \
+            "$SSH_USER@$SSH_HOST" \
+            'cd /root/LoiDen/Examiai && git rev-parse HEAD')
+
+          if [[ "$DEPLOYED_SHA" != "$GITHUB_SHA" ]]; then
+            echo "ERROR: Deployed commit does not match CI commit"
+            exit 1
+          fi
+
+          ssh "${SSH_ARGS[@]}" \
+            "$SSH_USER@$SSH_HOST" \
+            'cd /root/LoiDen/Examiai && bash scripts/smoke-staging.sh'
+
+          echo "STAGING DEPLOYMENT VERIFIED"

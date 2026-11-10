@@ -1,4 +1,19 @@
+import { requireUser } from "@/lib/auth/require-user";
+
 export async function POST(request: Request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
+
+  const contentLength = Number(
+    request.headers.get("content-length") || 0
+  );
+
+  if (contentLength > 12 * 1024 * 1024) {
+    return Response.json(
+      { error: "Audio request too large" },
+      { status: 413 }
+    );
+  }
   const { getRandomApiKey } = await import("@/lib/ai/models");
   const apiKey = getRandomApiKey();
   if (!apiKey) {
@@ -8,10 +23,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const formData = await request.formData();
-  const audio = formData.get("audio") as Blob | null;
-  if (!audio) {
-    return Response.json({ error: "No audio provided" }, { status: 400 });
+  let formData: FormData;
+
+  try {
+    formData = await request.formData();
+  } catch {
+    return Response.json(
+      { error: "Invalid audio request" },
+      { status: 400 }
+    );
+  }
+
+  const audio = formData.get("audio");
+
+  if (!(audio instanceof Blob) || audio.size === 0) {
+    return Response.json(
+      { error: "No valid audio provided" },
+      { status: 400 }
+    );
+  }
+
+  if (audio.size > 10 * 1024 * 1024) {
+    return Response.json(
+      { error: "Audio file too large" },
+      { status: 413 }
+    );
   }
 
   const fireworksForm = new FormData();

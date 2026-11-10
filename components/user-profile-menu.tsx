@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/provider";
 import { supabase } from "@/lib/supabase/client";
+import { authFetch } from "@/lib/auth/client-request";
 import { USFlag, VietnamFlag } from "@/components/icons/flags";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -59,7 +60,7 @@ export function UserProfileMenu() {
         return;
       }
 
-      const res = await fetch(`/api/profile?userId=${user.id}`);
+      const res = await authFetch("/api/profile");
       const profile = res.ok ? await res.json() : null;
       if (!cancelled) setIsAdmin(profile?.role === "admin");
     }

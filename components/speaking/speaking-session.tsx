@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase/client";
+import { authFetch } from "@/lib/auth/client-request";
 import RobotIcon from "@/components/icons/logo";
 import { UserProfileMenu } from "@/components/user-profile-menu";
 import ReactMarkdown from "react-markdown";
@@ -671,6 +672,21 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
     () =>
       new DefaultChatTransport({
         api: "/api/speaking",
+        fetch: async (input, init) => {
+          const { data } = await supabase.auth.getSession();
+          const token = data.session?.access_token;
+
+          const headers = new Headers(init?.headers);
+
+          if (token) {
+            headers.set("Authorization", `Bearer ${token}`);
+          }
+
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
         body: () => ({ questions, conversationId: conversationIdRef.current }),
       }),
     [questions],
@@ -685,9 +701,13 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
     }));
   }, [initialMessages]);
 
-  const { messages, sendMessage, regenerate, status } = useChat({
+  const { messages, sendMessage, regenerate, status, error } = useChat({
     transport,
     messages: chatInitialMessages,
+    onError: (err) => {
+      console.error("[speaking] AI error:", err);
+      setWaitingForFirstQuestion(false);
+    },
   });
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -739,7 +759,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
 
       // Fetch autoplay preference
       try {
-        const res = await fetch(`/api/profile?userId=${data.user.id}`);
+        const res = await authFetch(`/api/profile?userId=${data.user.id}`);
         const profile = await res.json();
         if (profile && typeof profile.speakingAutoplay === "boolean") {
           setAutoplay(profile.speakingAutoplay);
@@ -751,7 +771,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
       // Create conversation if not loading a saved one
       if (!conversationIdRef.current) {
         try {
-          const res = await fetch("/api/conversations", {
+          const res = await authFetch("/api/conversations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -765,7 +785,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
             conversationIdRef.current = conv.id;
 
             // Name the conversation after the first question's topic
-            fetch("/api/chat/name", {
+            authFetch("/api/chat/name", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -775,7 +795,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
             }).catch(() => {});
 
             // Save the questions config as the first system message
-            await fetch(`/api/conversations/${conv.id}/messages`, {
+            await authFetch(`/api/conversations/${conv.id}/messages`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -788,7 +808,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
             });
 
             // Save the hidden "Begin" user message for data consistency
-            await fetch(`/api/conversations/${conv.id}/messages`, {
+            await authFetch(`/api/conversations/${conv.id}/messages`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ role: "user", content: "Begin" }),
@@ -928,7 +948,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
   async function handleAutoplayToggle(checked: boolean) {
     setAutoplay(checked);
     if (userId) {
-      fetch("/api/profile", {
+      authFetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, speakingAutoplay: checked }),
@@ -941,11 +961,15 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
     audioFetchingRef.current.add(messageId);
     setLoadingAudioKeys(prev => { const next = new Set(prev); next.add(messageId); return next; });
     try {
-      const res = await fetch("/api/tts", {
+      const res = await authFetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
+      if (!res.ok) {
+        throw new Error(`TTS request failed: ${res.status}`);
+      }
+
       const blob = await res.blob();
 
       // Compute waveform data
@@ -1135,7 +1159,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
 
     // Save user message to DB
     if (conversationIdRef.current) {
-      fetch(`/api/conversations/${conversationIdRef.current}/messages`, {
+      authFetch(`/api/conversations/${conversationIdRef.current}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: "user", content: text }),
@@ -1270,7 +1294,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
         <div className="mx-auto max-w-3xl px-4 pb-6 md:px-8">
           <div className="flex flex-col gap-6">
             {/* Show loading audio player before first question arrives */}
-            {waitingForFirstQuestion && displayMessages.filter(m => m.role === "assistant").length === 0 && (
+            {!error && waitingForFirstQuestion && displayMessages.filter(m => m.role === "assistant").length === 0 && (
               <div className="flex gap-3">
                 <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted mt-0.5">
                   <RobotIcon className="size-4 fill-foreground" />
@@ -1288,6 +1312,23 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
                 </div>
               </div>
             )}
+            {error && (
+              <div className="rounded-xl border p-4 space-y-3">
+                <p className="text-sm text-destructive">
+                  {error.message.includes("AI_FREE_QUOTA_EXCEEDED")
+                    ? "OpenRouter Free da het luot hom nay."
+                    : "AI Speaking dang khong kha dung."}
+                </p>
+                <button
+                  type="button"
+                  className="rounded-lg border px-4 py-2 text-sm"
+                  onClick={() => window.location.assign("/chat")}
+                >
+                  Quay lai Chat
+                </button>
+              </div>
+            )}
+
             {displayMessages.map((message, msgIdx) => {
               const msgText = getMessageText(message);
 

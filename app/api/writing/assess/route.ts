@@ -1,6 +1,8 @@
 import { generateText, streamText, Output } from "ai";
 import { z } from "zod";
 import { chatModel, visionModel, namingModel } from "@/lib/ai/models";
+import { reserveAiQuota } from "@/lib/ai/quota";
+import { requireUser } from "@/lib/auth/require-user";
 import {
   WRITING_EXPERT_1_PROMPT,
   WRITING_EXPERT_2_PROMPT,
@@ -272,7 +274,18 @@ function filterRedundantVocabulary(
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    if (
+      /429|rate limit|quota exceeded|free-models-per-day/i.test(
+        message
+      )
+    ) {
+      throw error;
+    }
+
     return await fn();
   }
 }
@@ -295,6 +308,7 @@ async function streamExpert<S extends z.ZodType>(config: {
 }) {
   const { partialOutputStream } = streamText({
     model: config.model,
+    maxRetries: 0,
     system: config.system,
     messages: config.messages,
     maxOutputTokens: config.maxOutputTokens,
@@ -322,9 +336,75 @@ async function streamExpert<S extends z.ZodType>(config: {
   return finalData;
 }
 
+const writingRequestSchema = z.object({
+  taskNumber: z.enum(["1", "2"]),
+  question: z.string().trim().min(1).max(6000),
+  essay: z.string().trim().min(1).max(20000),
+  imageUrl: z.union([
+    z.string().url().max(2048),
+    z.literal(""),
+  ]).nullable().optional(),
+  wordCount: z.number().nonnegative().optional(),
+  timeSpent: z.number().nonnegative().optional(),
+  userId: z.string().uuid().nullable().optional(),
+  sections: z.array(
+    z.enum([
+      "overview",
+      "scoring",
+      "languageAnalysis",
+      "improvement",
+    ])
+  ).min(1).max(4).optional(),
+});
+
 export async function POST(req: Request) {
-  const { taskNumber, question, essay, imageUrl, wordCount, timeSpent, userId, sections: requestedSections } =
-    await req.json();
+  const auth = await requireUser(req);
+
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = await req.json();
+  } catch {
+    return Response.json(
+      { error: "Invalid JSON" },
+      { status: 400 }
+    );
+  }
+
+  const parsed = writingRequestSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid Writing submission" },
+      { status: 400 }
+    );
+  }
+
+  const data = parsed.data;
+
+  if (data.userId && data.userId !== auth.user.id) {
+    return Response.json(
+      { error: "Forbidden" },
+      { status: 403 }
+    );
+  }
+
+  const {
+    taskNumber,
+    question,
+    essay,
+    imageUrl,
+    wordCount,
+    timeSpent,
+    sections: requestedSections,
+  } = data;
+
+  // Never trust a userId supplied by the browser.
+  const userId = auth.user.id;
 
   // Which sections to run — default to all four
   const sectionsToRun: Set<string> = requestedSections
@@ -352,6 +432,13 @@ export async function POST(req: Request) {
     taskNumber === "1" ? improvementTask1Schema : improvementTask2Schema;
 
   const encoder = new TextEncoder();
+
+  const quotaFailure = await reserveAiQuota(
+    auth.user.id,
+    "writing"
+  );
+
+  if (quotaFailure) return quotaFailure;
 
   const stream = new ReadableStream({
     async start(controller) {

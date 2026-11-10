@@ -1,4 +1,6 @@
 import { after } from "next/server";
+import { z } from "zod";
+import { requireUser } from "@/lib/auth/require-user";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const BUCKET = "tts-cache";
@@ -10,8 +12,46 @@ async function hashText(text: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const ttsSchema = z.object({
+  text: z.string().trim().min(1).max(4000),
+});
+
 export async function POST(req: Request) {
-  const { text } = await req.json();
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
+  const contentLength = Number(
+    req.headers.get("content-length") || 0
+  );
+
+  if (contentLength > 20000) {
+    return Response.json(
+      { error: "Text request too large" },
+      { status: 413 }
+    );
+  }
+
+  let body: unknown;
+
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json(
+      { error: "Invalid JSON" },
+      { status: 400 }
+    );
+  }
+
+  const parsed = ttsSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid TTS text" },
+      { status: 400 }
+    );
+  }
+
+  const { text } = parsed.data;
   const hash = await hashText(text);
   const filePath = `${hash}.mp3`;
 

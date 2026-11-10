@@ -1,26 +1,61 @@
-import { generateText } from "ai";
-import { namingModel } from "@/lib/ai/models";
-import { CONVERSATION_NAMING_PROMPT } from "@/lib/ai/prompts";
-import { updateConversationTitle } from "@/lib/db/queries";
+import { z } from "zod";
+
+import {
+  getConversation,
+  updateConversationTitle,
+} from "@/lib/db/queries";
+
+import { requireUser } from "@/lib/auth/require-user";
+
+const schema = z.object({
+  message: z.string().trim().min(1).max(10000),
+  conversationId: z.string().uuid(),
+});
 
 export async function POST(req: Request) {
-  const { message, conversationId } = await req.json();
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
 
-  const { text } = await generateText({
-    model: namingModel(),
-    system: CONVERSATION_NAMING_PROMPT,
-    prompt: message,
-    maxOutputTokens: 50,
-  });
+  let body: unknown;
 
-  const title = text
-    .trim()
-    .replace(/^["']|["']$/g, "")
-    .slice(0, 100);
-
-  if (conversationId) {
-    await updateConversationTitle(conversationId, title);
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json(
+      { error: "Invalid JSON" },
+      { status: 400 }
+    );
   }
+
+  const parsed = schema.safeParse(body);
+
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid request" },
+      { status: 400 }
+    );
+  }
+
+  const { message, conversationId } = parsed.data;
+
+  const conversation = await getConversation(conversationId);
+
+  if (
+    !conversation ||
+    conversation.userId !== auth.user.id
+  ) {
+    return Response.json(
+      { error: "Conversation not found" },
+      { status: 404 }
+    );
+  }
+
+  // Generate a short title without calling AI.
+  const title =
+    message.replace(/\s+/g, " ").trim().slice(0, 80) ||
+    "IELTS Practice";
+
+  await updateConversationTitle(conversationId, title);
 
   return Response.json({ title });
 }
