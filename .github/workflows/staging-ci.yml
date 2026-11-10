@@ -45,9 +45,8 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       # Existing lint issues are advisory for Staging.
-      - name: ESLint
-        continue-on-error: true
-        run: pnpm run lint
+      - name: ESLint - Zero Warnings
+        run: pnpm exec eslint . --max-warnings=0
 
       - name: Validate Smoke Test syntax
         run: bash -n scripts/smoke-staging.sh
