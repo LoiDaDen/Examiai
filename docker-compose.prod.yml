@@ -1,6 +1,27 @@
+
 name: examinai-production
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: examinai_prod
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Required}
+      POSTGRES_DB: examinai_production
+
+    volumes:
+      - prod_pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U examinai_prod -d examinai_production
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   app:
     build:
       context: .
@@ -18,8 +39,17 @@ services:
       NODE_ENV: production
       PORT: "3000"
       APP_ENV: production
+      DATABASE_URL: postgresql://examinai_prod:${POSTGRES_PASSWORD:?Required}@postgres:5432/examinai_production
 
     ports:
       - "127.0.0.1:3002:3000"
 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     stop_grace_period: 20s
+
+volumes:
+  prod_pgdata:
+
