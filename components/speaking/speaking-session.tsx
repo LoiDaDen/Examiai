@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useEffectEvent, useCallback, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
@@ -649,6 +649,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
   const hasSentInitial = useRef(!!initialMessages);
   const [waitingForFirstQuestion, setWaitingForFirstQuestion] = useState(!initialMessages);
   const hasInitializedRestore = useRef(false);
+  const initStartedRef = useRef(false);
   const autoplayedMessages = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
   const [waveformData, setWaveformData] = useState<Record<string, number[]>>({});
@@ -743,8 +744,11 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
     }
   }, [messages, isLoading, regenerate]);
 
-  // Initialize conversation and trigger first AI message on mount
+  // Initialize once, even if sendMessage or question props change.
   useEffect(() => {
+    if (initStartedRef.current) return;
+    initStartedRef.current = true;
+
     async function init() {
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
@@ -826,8 +830,8 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
       }
     }
 
-    init();
-  }, []);
+    void init();
+  }, [questions, sendMessage]);
 
   // Auto-scroll on new messages or when next question appears
   useEffect(() => {
@@ -881,7 +885,11 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
     if (feedbackIds.length > 0) {
       setReadyForNextQuestion(new Set(feedbackIds));
     }
-  }, [messages]);
+  }, [messages, initialMessages]);
+
+  const playAudioFromEffect = useEffectEvent((text: string, key: string) => {
+    void playTtsAudio(text, key);
+  });
 
   // Pre-fetch TTS audio and autoplay when new assistant messages arrive
   useEffect(() => {
@@ -902,7 +910,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
           if (!audioCacheRef.current.has(audioKey) && !audioFetchingRef.current.has(audioKey)) {
             if (autoplay && !autoplayedMessages.current.has(audioKey)) {
               autoplayedMessages.current.add(audioKey);
-              playTtsAudio(feedback.nextQuestion, audioKey);
+              playAudioFromEffect(feedback.nextQuestion, audioKey);
             } else {
               prepareTtsAudio(feedback.nextQuestion, audioKey);
             }
@@ -914,7 +922,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
           if (!audioCacheRef.current.has(endKey) && !audioFetchingRef.current.has(endKey)) {
             if (autoplay && !autoplayedMessages.current.has(endKey)) {
               autoplayedMessages.current.add(endKey);
-              playTtsAudio(endText, endKey);
+              playAudioFromEffect(endText, endKey);
             } else {
               prepareTtsAudio(endText, endKey);
             }
@@ -929,7 +937,7 @@ export function SpeakingSession({ questions, onEnd, initialConversationId, initi
     if (!audioCacheRef.current.has(lastMessage.id) && !audioFetchingRef.current.has(lastMessage.id)) {
       if (autoplay && !autoplayedMessages.current.has(lastMessage.id)) {
         autoplayedMessages.current.add(lastMessage.id);
-        playTtsAudio(msgText, lastMessage.id);
+        playAudioFromEffect(msgText, lastMessage.id);
       } else {
         prepareTtsAudio(msgText, lastMessage.id);
       }

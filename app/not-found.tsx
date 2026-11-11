@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Home } from "lucide-react";
+import Link from "next/link";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import RobotIcon from "@/components/icons/logo";
 import { USFlag, VietnamFlag } from "@/components/icons/flags";
@@ -31,13 +32,13 @@ const LANGUAGES = [
 
 function BrandMark() {
   return (
-    <a href="/" className="flex items-center gap-3 transition-opacity hover:opacity-80">
+    <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-80">
       <RobotIcon className="size-6 text-primary" />
       <span className="font-brand text-2xl font-bold tracking-tight text-foreground">
         Examin
         <span className="text-primary">ai</span>
       </span>
-    </a>
+    </Link>
   );
 }
 
@@ -112,7 +113,7 @@ export default function NotFound() {
             size="lg"
             className="font-heading px-7 py-3 text-base font-semibold"
             nativeButton={false}
-            render={<a href="/" />}
+            render={<Link href="/" />}
           >
             <Home className="mr-1 size-4" />
             {t.home}

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Home, Clock, Send, HelpCircle, FileText } from "lucide-react";
 import { useI18n } from "@/lib/i18n/provider";
@@ -54,10 +56,12 @@ export function WritingTest({ questions, onSubmit, onBack }: WritingTestProps) {
   const [showTimeUpDialog, setShowTimeUpDialog] = useState(false);
   const [showBackDialog, setShowBackDialog] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef(Date.now());
+  const startTimeRef = useRef<number | null>(null);
 
   const buildSubmissions = useCallback((): WritingSubmission[] => {
-    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    const elapsed = startTimeRef.current === null
+      ? 0
+      : Math.floor((Date.now() - startTimeRef.current) / 1000);
     return questions.map((q) => ({
       taskNumber: q.taskNumber,
       question: q.content,
@@ -71,6 +75,7 @@ export function WritingTest({ questions, onSubmit, onBack }: WritingTestProps) {
   }, [questions, essays]);
 
   useEffect(() => {
+    startTimeRef.current = Date.now();
     intervalRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -197,9 +202,12 @@ export function WritingTest({ questions, onSubmit, onBack }: WritingTestProps) {
                     {question.content}
                   </p>
                   {question.imageUrl && (
-                    <img
+                    <Image
                       src={question.imageUrl}
                       alt={t.writing.taskChart}
+                      width={1200}
+                      height={800}
+                      unoptimized
                       className="w-full h-auto object-contain mt-4 rounded-xl"
                     />
                   )}

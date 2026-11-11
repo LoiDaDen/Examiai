@@ -159,12 +159,15 @@ export default function Home() {
   }, [router]);
 
   useEffect(() => {
-    const path = window.location.pathname.toLowerCase();
-    if (path.startsWith("/vi")) {
-      setLanguage("VI");
-    } else if (path.startsWith("/en")) {
-      setLanguage("EN");
-    }
+    const id = window.setTimeout(() => {
+      const path = window.location.pathname.toLowerCase();
+      if (path.startsWith("/vi")) {
+        setLanguage("VI");
+      } else if (path.startsWith("/en")) {
+        setLanguage("EN");
+      }
+    }, 0);
+    return () => window.clearTimeout(id);
   }, []);
 
   const handleLanguageChange = useCallback(

@@ -30,19 +30,22 @@ export default function SpeakingPageClient({
   useEffect(() => {
     if (savedConversation) return;
 
-    try {
-      const stored = sessionStorage.getItem("speaking-questions");
-      if (stored) {
-        const parsed = JSON.parse(stored) as SpeakingQuestionData[];
-        setQuestions(parsed);
-        sessionStorage.removeItem("speaking-questions");
-        setInitialized(true);
-      } else {
-        router.push("/chat");
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = sessionStorage.getItem("speaking-questions");
+        const parsed: unknown = stored ? JSON.parse(stored) : null;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setQuestions(parsed as SpeakingQuestionData[]);
+          setInitialized(true);
+        } else {
+          router.replace("/chat");
+        }
+      } catch {
+        router.replace("/chat");
       }
-    } catch {
-      router.push("/chat");
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [router, savedConversation]);
 
   if (!initialized) {
@@ -57,7 +60,10 @@ export default function SpeakingPageClient({
     <div className="flex h-dvh flex-col bg-background">
       <SpeakingSession
         questions={questions}
-        onEnd={() => router.push("/chat")}
+        onEnd={() => {
+          sessionStorage.removeItem("speaking-questions");
+          router.push("/chat");
+        }}
         initialConversationId={savedConversation?.conversationId}
         initialMessages={savedConversation?.messages}
       />

@@ -203,14 +203,18 @@ function AccordionItem({
   const wasLoadingRef = useRef(isLoading);
 
   useEffect(() => {
-    if (wasLoadingRef.current && !isLoading && isDone) {
+    const wasLoading = wasLoadingRef.current;
+    wasLoadingRef.current = isLoading;
+    if (!wasLoading || isLoading || !isDone) return;
+
+    const timer = window.setTimeout(() => {
       if (showCheckOnComplete) {
         setShowCheck(true);
       } else if (badge) {
         setPingKey(Date.now());
       }
-    }
-    wasLoadingRef.current = isLoading;
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [isLoading, isDone, badge, showCheckOnComplete]);
 
   return (
@@ -397,10 +401,6 @@ export function WritingAssessment({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Stable ref for conversation ID (may arrive after assessment completes)
-  const conversationIdRef = useRef(conversationId);
-  conversationIdRef.current = conversationId;
-
   // Chat transport — uses the same /api/chat endpoint
   const transport = useMemo(
     () =>
@@ -421,7 +421,6 @@ export function WritingAssessment({
             headers,
           });
         },
-        body: () => ({ conversationId: conversationIdRef.current }),
       }),
     [],
   );
@@ -507,7 +506,7 @@ export function WritingAssessment({
 
     // Save user message to DB
     try {
-      await authFetch(`/api/conversations/${conversationIdRef.current}/messages`, {
+      await authFetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: "user", content: text }),
@@ -516,7 +515,7 @@ export function WritingAssessment({
       // Non-critical
     }
 
-    sendMessage({ text });
+    sendMessage({ text }, { body: { conversationId } });
   }
 
   const sections: {
